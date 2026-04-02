@@ -4,10 +4,13 @@ import api from '../services/api';
 export default function Servicios() {
 	const [kpi, setKpi] = useState({ pendientes: 0, en_proceso: 0, completados_hoy: 0 });
 	const [search, setSearch] = useState('');
+	const [estadoFilter, setEstadoFilter] = useState('todos');
 	const [data, setData] = useState({ data: [] });
 	const [loading, setLoading] = useState(false);
 	const [modalOpen, setModalOpen] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [modalError, setModalError] = useState('');
+	const [changingId, setChangingId] = useState(null);
 	const [clientes, setClientes] = useState([]);
 	const [servicios, setServicios] = useState([]);
 	const [form, setForm] = useState({
@@ -24,7 +27,13 @@ export default function Servicios() {
 		try {
 			const [res1, res2] = await Promise.all([
 				api.get('/ordenes-servicio/resumen'),
-				api.get('/ordenes-servicio', { params: { q: search, page } }),
+				api.get('/ordenes-servicio', {
+					params: {
+						q: search,
+						page,
+						estado: estadoFilter === 'todos' ? undefined : estadoFilter,
+					},
+				}),
 			]);
 			setKpi(res1.data);
 			setData(res2.data);
@@ -32,9 +41,10 @@ export default function Servicios() {
 			setLoading(false);
 		}
 	};
-	useEffect(() => { load(1); }, []);
+	useEffect(() => { load(1); }, [estadoFilter]);
 	const openModal = async () => {
 		setModalOpen(true);
+		setModalError('');
 		const [c, s] = await Promise.allSettled([api.get('/clientes/all'), api.get('/servicios/all')]);
 		let clientesList = [];
 		if (c.status === 'fulfilled' && Array.isArray(c.value.data)) {
@@ -50,17 +60,55 @@ export default function Servicios() {
 		}
 		setClientes(clientesList);
 		let serviciosList = s.status === 'fulfilled' ? (Array.isArray(s.value.data) ? s.value.data : []) : [];
+		// #region agent log
+		fetch('http://127.0.0.1:7244/ingest/d83e80e1-f048-4e4b-9029-647de430b165',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/pages/Servicios.jsx:openModal',message:'API servicios/all result',data:{fulfilled:s.status==='fulfilled',count:Array.isArray(serviciosList)?serviciosList.length:-1,ids:(Array.isArray(serviciosList)?serviciosList.slice(0,8).map(x=>x.id):[])},timestamp:Date.now(),runId:'pre-fix',hypothesisId:'H1'})}).catch(()=>{});
+		// #endregion
 		if (serviciosList.length === 0) {
-			try {
-				const altS = await api.get('/servicios', { params: { page: 1 } });
-				serviciosList = altS.data?.data ?? [];
-			} catch (_) {
-				serviciosList = [];
+			// Fallback robusto: recorrer todas las páginas del índice hasta completar
+			let page = 1;
+			const acumulado = [];
+			const perPageFallback = 10;
+			while (true) {
+				try {
+					const altS = await api.get('/servicios', { params: { page } });
+					const pageData = altS.data?.data ?? [];
+					acumulado.push(...pageData);
+					// criterio de corte: si llega menos de perPage, asumimos última página
+					const perPage = altS.data?.per_page ?? perPageFallback;
+					const isLast = pageData.length < perPage;
+					// #region agent log
+					fetch('http://127.0.0.1:7244/ingest/d83e80e1-f048-4e4b-9029-647de430b165',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/pages/Servicios.jsx:openModal',message:'Fallback pagina servicios',data:{page,count:pageData.length,total:acumulado.length,perPage,isLast},timestamp:Date.now(),runId:'pre-fix',hypothesisId:'H2_pages'})}).catch(()=>{});
+					// #endregion
+					if (isLast) break;
+					page += 1;
+				} catch (_) {
+					break;
+				}
 			}
+			serviciosList = acumulado;
+			// #region agent log
+			fetch('http://127.0.0.1:7244/ingest/d83e80e1-f048-4e4b-9029-647de430b165',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/pages/Servicios.jsx:openModal',message:'Fallback servicios (todas las paginas) total',data:{count:Array.isArray(serviciosList)?serviciosList.length:-1},timestamp:Date.now(),runId:'pre-fix',hypothesisId:'H2_total'})}).catch(()=>{});
+			// #endregion
 		}
-		setServicios(serviciosList.filter((x) => x.activo));
+		// Mostrar servicios activos, unificados por nombre (normalizado) y quedándonos con el más reciente (id mayor)
+		const activos = serviciosList.filter((s) => s?.activo);
+		const byName = new Map();
+		for (const s of activos) {
+			const key = String(s.nombre || '').trim().toLowerCase();
+			if (!key) continue;
+			const prev = byName.get(key);
+			if (!prev || Number(s.id) > Number(prev.id)) byName.set(key, s);
+		}
+		const uniques = Array.from(byName.values()).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+		// #region agent log
+		fetch('http://127.0.0.1:7244/ingest/d83e80e1-f048-4e4b-9029-647de430b165',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'frontend/src/pages/Servicios.jsx:openModal',message:'Servicios unicos por nombre',data:{count:uniques.length,nombres:uniques.map(x=>x.nombre)},timestamp:Date.now(),runId:'pre-fix',hypothesisId:'H4_frontend_dedup'})}).catch(()=>{});
+		// #endregion
+		setServicios(uniques);
 	};
-	const closeModal = () => setModalOpen(false);
+	const closeModal = () => {
+		setModalOpen(false);
+		setModalError('');
+	};
 
 	useEffect(() => {
 		const selected = servicios.find((x) => String(x.id) === String(form.servicio_id));
@@ -73,13 +121,24 @@ export default function Servicios() {
 	const save = async (e) => {
 		e?.preventDefault();
 		setSaving(true);
+		setModalError('');
 		try {
 			const payload = { ...form };
+			payload.cliente_id = payload.cliente_id ? Number(payload.cliente_id) : null;
+			payload.servicio_id = payload.servicio_id ? Number(payload.servicio_id) : null;
+			// Normaliza decimal con coma -> punto
+			if (payload.total !== '' && payload.total !== null && payload.total !== undefined) {
+				payload.total = Number(String(payload.total).replace(',', '.'));
+			} else {
+				delete payload.total;
+			}
 			if (!payload.fecha) delete payload.fecha;
 			await api.post('/ordenes-servicio', payload);
 			setModalOpen(false);
 			setForm({ cliente_id: '', vehiculo: '', servicio_id: '', mecanico: '', fecha: '', total: '' });
 			load(1);
+		} catch (err) {
+			setModalError(err?.response?.data?.message || 'No se pudo crear el servicio');
 		} finally {
 			setSaving(false);
 		}
@@ -93,6 +152,16 @@ export default function Servicios() {
 		};
 		const text = { completado: 'Completado', en_proceso: 'En Proceso', pendiente: 'Pendiente' }[estado] || estado;
 		return <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${map[estado]}`}>{text}</span>;
+	};
+
+	const cambiarEstado = async (id, estado) => {
+		setChangingId(id);
+		try {
+			await api.patch(`/ordenes-servicio/${id}/estado`, { estado });
+			await load(1);
+		} finally {
+			setChangingId(null);
+		}
 	};
 
 	return (
@@ -109,10 +178,34 @@ export default function Servicios() {
 			</div>
 
 			<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-				<CardKpi title="Pendientes" value={kpi.pendientes} tone="danger" />
-				<CardKpi title="En Proceso" value={kpi.en_proceso} tone="warning" />
-				<CardKpi title="Completados Hoy" value={kpi.completados_hoy} tone="success" />
+				<CardKpi
+					title="Pendientes"
+					value={kpi.pendientes}
+					tone="danger"
+					active={estadoFilter === 'pendiente'}
+					onClick={() => setEstadoFilter(estadoFilter === 'pendiente' ? 'todos' : 'pendiente')}
+				/>
+				<CardKpi
+					title="En Proceso"
+					value={kpi.en_proceso}
+					tone="warning"
+					active={estadoFilter === 'en_proceso'}
+					onClick={() => setEstadoFilter(estadoFilter === 'en_proceso' ? 'todos' : 'en_proceso')}
+				/>
+				<CardKpi
+					title="Completados Hoy"
+					value={kpi.completados_hoy}
+					tone="success"
+					active={estadoFilter === 'completado'}
+					onClick={() => setEstadoFilter(estadoFilter === 'completado' ? 'todos' : 'completado')}
+				/>
 			</div>
+			{estadoFilter !== 'todos' && (
+				<div className="mb-3 text-sm text-gray-600">
+					Filtro activo: <span className="font-semibold">{estadoFilter === 'en_proceso' ? 'En Proceso' : estadoFilter.charAt(0).toUpperCase() + estadoFilter.slice(1)}</span>
+					<button className="ml-3 text-primary underline" onClick={() => setEstadoFilter('todos')}>Ver todos</button>
+				</div>
+			)}
 
 			<div className="mb-4">
 				<div className="relative max-w-3xl">
@@ -155,7 +248,21 @@ export default function Servicios() {
 								<td className="px-5 py-4">
 									{r.fecha ? new Date(r.fecha).toISOString().slice(0, 10) : '-'}
 								</td>
-								<td className="px-5 py-4">{badge(r.estado)}</td>
+								<td className="px-5 py-4">
+									<div className="flex items-center gap-2">
+										{badge(r.estado)}
+										<select
+											className="border rounded-lg px-2 py-1 text-xs bg-white"
+											value={r.estado}
+											disabled={changingId === r.id}
+											onChange={(e) => cambiarEstado(r.id, e.target.value)}
+										>
+											<option value="pendiente">Pendiente</option>
+											<option value="en_proceso">En Proceso</option>
+											<option value="completado">Completado</option>
+										</select>
+									</div>
+								</td>
 								<td className="px-5 py-4">Bs {Number(r.total).toFixed(0)}</td>
 							</tr>
 						))}
@@ -172,12 +279,13 @@ export default function Servicios() {
 				setForm={setForm}
 				onSave={save}
 				saving={saving}
+				error={modalError}
 			/>
 		</div>
 	);
 }
 
-function CardKpi({ title, value, tone }) {
+function CardKpi({ title, value, tone, onClick, active }) {
 	const map = {
 		danger: { bg: 'bg-rose-500/15', iconBg: 'bg-rose-600', icon: 'M12 8v8m-4-4h8' },
 		warning: { bg: 'bg-amber-500/15', iconBg: 'bg-amber-500', icon: 'M12 8v4l3 3' },
@@ -185,7 +293,7 @@ function CardKpi({ title, value, tone }) {
 	}[tone] || { bg: 'bg-gray-100', iconBg: 'bg-gray-400', icon: '' };
 
 	return (
-		<div className={`rounded-xl ${map.bg} p-4 ring-1 ring-black/5`}>
+		<button type="button" onClick={onClick} className={`w-full text-left rounded-xl ${map.bg} p-4 ring-1 ${active ? 'ring-primary' : 'ring-black/5'} transition`}>
 			<p className="text-sm text-gray-600 mb-1">{title}</p>
 			<div className="flex items-center justify-between">
 				<div className="text-3xl font-extrabold text-gray-900">{value}</div>
@@ -193,14 +301,14 @@ function CardKpi({ title, value, tone }) {
 					<span className="text-xl">✓</span>
 				</div>
 			</div>
-		</div>
+		</button>
 	);
 }
 
 // Modal
 // Simple dialog using native <dialog> not required; we render conditionally
 // For compatibility we use a fixed overlay
-export function NuevoServicioModal({ open, onClose, clientes, servicios, form, setForm, onSave, saving }) {
+export function NuevoServicioModal({ open, onClose, clientes, servicios, form, setForm, onSave, saving, error }) {
 	if (!open) return null;
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
@@ -246,6 +354,7 @@ export function NuevoServicioModal({ open, onClose, clientes, servicios, form, s
 						<button type="button" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50" onClick={onClose}>Cancelar</button>
 						<button className="px-4 py-2 rounded-lg bg-primary hover:bg-blue-700 text-white" disabled={saving}>{saving ? 'Guardando...' : 'Crear Servicio'}</button>
 					</div>
+					{error && <p className="text-sm text-red-600">{error}</p>}
 				</form>
 			</div>
 		</div>

@@ -23,10 +23,9 @@ class ClienteController extends Controller
 			'email' => ['nullable', 'email', 'max:255', Rule::unique('clientes', 'email')->ignore(null)],
 			'direccion' => ['nullable', 'string', 'max:255'],
 			'ci' => ['nullable', 'string', 'max:100'],
-			'activo' => ['boolean'],
 		]);
 
-		$cliente = Cliente::create($data + ['activo' => $request->boolean('activo', true)]);
+		$cliente = Cliente::create($data);
 		return response()->json($cliente, 201);
 	}
 
@@ -50,7 +49,6 @@ class ClienteController extends Controller
 			'email' => ['nullable', 'email', 'max:255', Rule::unique('clientes', 'email')->ignore($cliente->id)],
 			'direccion' => ['nullable', 'string', 'max:255'],
 			'ci' => ['nullable', 'string', 'max:100'],
-			'activo' => ['boolean'],
 		]);
 		$cliente->update($data);
 		return response()->json($cliente);
@@ -62,11 +60,5 @@ class ClienteController extends Controller
 		return response()->json(['message' => 'Cliente eliminado']);
 	}
 
-	public function toggle(Cliente $cliente)
-	{
-		$cliente->activo = !$cliente->activo;
-		$cliente->save();
-		return response()->json($cliente);
-	}
 }
 

@@ -35,9 +35,35 @@ class ServicioController extends Controller
 
 	public function all()
 	{
-		return response()->json(
-			Servicio::orderBy('nombre')->get(['id', 'nombre', 'precio', 'activo'])
-		);
+		$rows = Servicio::where('activo', true)
+			->orderBy('nombre')
+			->get(['id', 'nombre', 'precio', 'activo']);
+
+		// Debug logging to local NDJSON file for investigation
+		try {
+			$payload = [
+				'id' => 'log_'.time().'_servicios_all',
+				'timestamp' => round(microtime(true) * 1000),
+				'location' => 'ServicioController@all',
+				'message' => 'Servicios activos devueltos',
+				'data' => [
+					'count' => $rows->count(),
+					'first' => $rows->take(8)->map(fn($r) => ['id' => $r->id, 'nombre' => $r->nombre, 'precio' => $r->precio]),
+				],
+				'runId' => 'pre-fix',
+				'hypothesisId' => 'H1_backend',
+			];
+			$logPath = base_path('.cursor/debug.log');
+			$dir = dirname($logPath);
+			if (!is_dir($dir)) {
+				@mkdir($dir, 0777, true);
+			}
+			@file_put_contents($logPath, json_encode($payload, JSON_UNESCAPED_UNICODE).PHP_EOL, FILE_APPEND);
+		} catch (\Throwable $e) {
+			// silencioso
+		}
+
+		return response()->json($rows->values());
 	}
 
 	public function update(Request $request, Servicio $servicio)

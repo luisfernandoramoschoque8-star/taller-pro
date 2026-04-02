@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Venta;
 use App\Models\DetalleVenta;
 use App\Models\Producto;
+use App\Models\OrdenServicio;
+use App\Models\Servicio;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -17,7 +19,12 @@ class ReporteController extends Controller
 
 		$ventasQ = Venta::whereBetween('created_at', [$from, $to])->where('estado', '!=', 'anulado');
 		$totalVentas = (float) $ventasQ->sum('total');
-		$totalServicios = (int) DetalleVenta::whereBetween('created_at', [$from, $to])->where('tipo', 'servicio')->sum('cantidad');
+		// Servicios: contar por detalle_ventas; si no hay, contar órdenes en el periodo
+		$totalServicios = (int) DetalleVenta::whereBetween('created_at', [$from, $to])
+			->where('tipo', 'servicio')->sum('cantidad');
+		if ($totalServicios <= 0) {
+			$totalServicios = (int) OrdenServicio::whereBetween('created_at', [$from, $to])->count();
+		}
 		$ingresosNetos = (float) $ventasQ->sum('total');
 		$stockBajo = (int) Producto::whereColumn('stock', '<=', 'stock_minimo')->count();
 
@@ -27,6 +34,13 @@ class ReporteController extends Controller
 			->groupBy(DB::raw('DATE(created_at)'))
 			->orderBy('fecha')
 			->get();
+		if ($ventasPorDia->isEmpty()) {
+			$ventasPorDia = OrdenServicio::selectRaw('DATE(created_at) as fecha, SUM(total) as total')
+				->whereBetween('created_at', [$from, $to])
+				->groupBy(DB::raw('DATE(created_at)'))
+				->orderBy('fecha')
+				->get();
+		}
 
 		$serviciosSolicitados = DetalleVenta::join('servicios', 'detalle_ventas.servicio_id', '=', 'servicios.id')
 			->whereBetween('detalle_ventas.created_at', [$from, $to])
@@ -36,6 +50,15 @@ class ReporteController extends Controller
 			->orderByDesc('cantidad')
 			->limit(5)
 			->get();
+		if ($serviciosSolicitados->isEmpty()) {
+			$serviciosSolicitados = OrdenServicio::join('servicios', 'ordenes_servicio.servicio_id', '=', 'servicios.id')
+				->whereBetween('ordenes_servicio.created_at', [$from, $to])
+				->selectRaw('servicios.nombre, COUNT(*) as cantidad')
+				->groupBy('servicios.nombre')
+				->orderByDesc('cantidad')
+				->limit(5)
+				->get();
+		}
 
 		$stockRows = Producto::with('categoria')
 			->whereColumn('stock', '<=', 'stock_minimo')
@@ -51,6 +74,9 @@ class ReporteController extends Controller
 			]);
 
 		$ingServicios = (float) DetalleVenta::whereBetween('created_at', [$from, $to])->where('tipo', 'servicio')->sum('subtotal');
+		if ($ingServicios <= 0) {
+			$ingServicios = (float) OrdenServicio::whereBetween('created_at', [$from, $to])->sum('total');
+		}
 		$ingProductos = (float) DetalleVenta::whereBetween('created_at', [$from, $to])->where('tipo', 'producto')->sum('subtotal');
 		$totalIng = max(1, $ingServicios + $ingProductos);
 

@@ -4,11 +4,9 @@ import api from '../services/api';
 export default function Ventas() {
 	const [clientes, setClientes] = useState([]);
 	const [productos, setProductos] = useState([]);
-	const [servicios, setServicios] = useState([]);
 	const [ventasHoy, setVentasHoy] = useState([]);
 
 	const [clienteId, setClienteId] = useState('');
-	const [tipo, setTipo] = useState('producto');
 	const [itemId, setItemId] = useState('');
 	const [cantidad, setCantidad] = useState(1);
 	const [error, setError] = useState('');
@@ -16,9 +14,8 @@ export default function Ventas() {
 	useEffect(() => {
 		Promise.allSettled([
 			api.get('/clientes/all'),
-			api.get('/servicios/all'),
 			api.get('/ventas/hoy'),
-		]).then(async ([c, s, v]) => {
+		]).then(async ([c, v]) => {
 			// Clientes con fallback a index paginado
 			let clientesData = (c.status === 'fulfilled' && Array.isArray(c.value.data)) ? c.value.data : [];
 			if (clientesData.length === 0) {
@@ -28,10 +25,6 @@ export default function Ventas() {
 				} catch (_) { /* ignore */ }
 			}
 			setClientes(clientesData);
-
-			// Servicios
-			let serviciosData = (s.status === 'fulfilled' && Array.isArray(s.value.data)) ? s.value.data : [];
-			setServicios(serviciosData);
 
 			// Ventas del día
 			const ventasData = (v.status === 'fulfilled') ? (v.value.data || []) : [];
@@ -48,13 +41,17 @@ export default function Ventas() {
 
 	const addItem = async () => {
 		setError('');
+		if (!clienteId) {
+			setError('Selecciona un cliente. Es obligatorio.');
+			return;
+		}
 		if (!itemId || cantidad <= 0) {
-			setError('Selecciona un producto/servicio y cantidad válida.');
+			setError('Selecciona un producto y una cantidad válida.');
 			return;
 		}
 		const payload = {
-			cliente_id: clienteId || null,
-			items: [{ tipo, id: Number(itemId), cantidad: Number(cantidad) }],
+			cliente_id: Number(clienteId),
+			items: [{ tipo: 'producto', id: Number(itemId), cantidad: Number(cantidad) }],
 			descuento: 0,
 		};
 		try {
@@ -76,40 +73,27 @@ export default function Ventas() {
 				<div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-100 p-4">
 					<h2 className="font-semibold text-gray-800 mb-3">Nueva Venta</h2>
 					<div className="mb-4">
-						<label className="block text-sm text-gray-600 mb-1">Cliente (opcional)</label>
+						<label className="block text-sm text-gray-600 mb-1">Cliente</label>
 						<select className="w-full border rounded-lg px-3 py-2" value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
 							<option value="">Selecciona un cliente</option>
 							{clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
 						</select>
 					</div>
 					<div className="bg-gray-50 rounded-lg p-3 mb-3">
-						<p className="font-medium text-gray-800 mb-2">Agregar Producto/Servicio</p>
+						<p className="font-medium text-gray-800 mb-2">Agregar Producto</p>
 						<div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
 							<div>
-								<label className="block text-sm text-gray-600 mb-1">Tipo</label>
-								<select className="w-full border rounded-lg px-3 py-2" value={tipo} onChange={(e) => { setTipo(e.target.value); setItemId(''); }}>
-									<option value="producto">Producto</option>
-									<option value="servicio">Servicio</option>
-								</select>
-							</div>
-							<div>
-								<label className="block text-sm text-gray-600 mb-1">Seleccionar {tipo === 'producto' ? 'Producto' : 'Servicio'}</label>
+								<label className="block text-sm text-gray-600 mb-1">Seleccionar Producto</label>
 								<select className="w-full border rounded-lg px-3 py-2" value={itemId} onChange={(e) => setItemId(e.target.value)}>
 									<option value="">Selecciona...</option>
-									{tipo === 'producto'
-										? productos.map((p) => (
-											<option key={p.id} value={p.id}>
-												{p.nombre} - Bs {Number(p.precio_venta || 0).toFixed(0)}
-											</option>
-										))
-										: servicios.map((s) => (
-											<option key={s.id} value={s.id}>
-												{s.nombre} - Bs {Number(s.precio || 0).toFixed(0)}
-											</option>
-										))}
+									{productos.map((p) => (
+										<option key={p.id} value={p.id}>
+											{p.nombre} - Bs {Number(p.precio_venta || 0).toFixed(0)}
+										</option>
+									))}
 								</select>
-								{((tipo === 'producto' && productos.length === 0) || (tipo === 'servicio' && servicios.length === 0)) && (
-									<p className="text-xs text-amber-600 mt-1">No hay datos cargados. Ejecuta seeders de productos/servicios.</p>
+								{productos.length === 0 && (
+									<p className="text-xs text-amber-600 mt-1">No hay productos cargados.</p>
 								)}
 							</div>
 							<div className="flex gap-2">

@@ -43,17 +43,7 @@ export default function Dashboard() {
 			<div className="bg-white rounded-xl ring-1 ring-gray-100 p-4">
 				<h3 className="font-bold mb-1">Servicios Más Solicitados</h3>
 				<p className="text-gray-500 text-sm mb-3">Top 5 de servicios del último mes</p>
-				<div className="space-y-3">
-					{(data?.top_servicios || []).map((r, i) => (
-						<div key={i} className="flex items-center gap-3">
-							<div className="w-40 text-sm text-gray-700">{r.nombre}</div>
-							<div className="flex-1 h-8 bg-gray-100 rounded">
-								<div className="h-8 bg-blue-700 rounded" style={{ width: `${(Number(r.cantidad || 0) / topMax) * 100}%` }} />
-							</div>
-							<div className="w-10 text-right font-semibold">{r.cantidad}</div>
-						</div>
-					))}
-				</div>
+				<BarChartLike rows={data?.top_servicios || []} max={topMax} />
 			</div>
 		</div>
 	);
@@ -137,4 +127,86 @@ function EstadoBadge({ estado }) {
 }
 
 function fmt(n) { return Number(n || 0).toLocaleString('es-BO', { maximumFractionDigits: 0 }); }
+
+function BarChartLike({ rows, max }) {
+	if (!rows.length) return <div className="text-sm text-gray-500">Sin datos</div>;
+	const [tip, setTip] = useState(null);
+	const w = 980;
+	const h = 320;
+	const left = 54;
+	const right = 24;
+	const top = 18;
+	const bottom = 54;
+	const plotW = w - left - right;
+	const plotH = h - top - bottom;
+	const step = plotW / rows.length;
+	const barW = Math.min(140, step * 0.8);
+	const ticks = [0, 15, 30, 45, 60];
+	const scaleMax = Math.max(60, Math.ceil((max || 1) / 15) * 15);
+
+	return (
+		<div className="w-full overflow-x-auto relative">
+			<svg viewBox={`0 0 ${w} ${h}`} className="w-full h-80">
+				<rect x="0" y="0" width={w} height={h} fill="white" />
+				{ticks.map((t) => {
+					const y = top + plotH - (t / scaleMax) * plotH;
+					return (
+						<g key={t}>
+							<line x1={left} y1={y} x2={w - right} y2={y} stroke="#d1d5db" strokeDasharray="4 4" />
+							<text x={left - 8} y={y + 4} textAnchor="end" fontSize="12" fill="#6b7280">{t}</text>
+						</g>
+					);
+				})}
+				<line x1={left} y1={top} x2={left} y2={top + plotH} stroke="#6b7280" />
+				<line x1={left} y1={top + plotH} x2={w - right} y2={top + plotH} stroke="#6b7280" />
+
+				{rows.map((r, i) => {
+					const v = Number(r.cantidad || 0);
+					const x = left + i * step + (step - barW) / 2;
+					const bh = (v / scaleMax) * plotH;
+					const y = top + plotH - bh;
+					return (
+						<g key={i}>
+							<rect
+								x={x}
+								y={y}
+								width={barW}
+								height={bh}
+								fill="#1f64b2"
+								onMouseEnter={(e) => {
+									setTip({
+										x: e.nativeEvent.offsetX,
+										y: e.nativeEvent.offsetY,
+										name: r.nombre,
+										value: v,
+									});
+								}}
+								onMouseMove={(e) => {
+									setTip((prev) => prev ? ({
+										...prev,
+										x: e.nativeEvent.offsetX,
+										y: e.nativeEvent.offsetY,
+									}) : prev);
+								}}
+								onMouseLeave={() => setTip(null)}
+							/>
+							<text x={x + barW / 2} y={h - 20} textAnchor="middle" fontSize="11" fill="#4b5563">
+								{r.nombre}
+							</text>
+						</g>
+					);
+				})}
+			</svg>
+			{tip && (
+				<div
+					className="absolute z-10 bg-white border border-gray-300 shadow px-4 py-3 text-sm"
+					style={{ left: tip.x + 16, top: tip.y - 30 }}
+				>
+					<div className="text-gray-900 mb-1">{tip.name}</div>
+					<div className="text-blue-700">cantidad : {tip.value}</div>
+				</div>
+			)}
+		</div>
+	);
+}
 

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 export default function Reportes() {
 	const [periodo, setPeriodo] = useState('mes');
@@ -10,6 +12,69 @@ export default function Reportes() {
 		setData(data);
 	};
 	useEffect(() => { load('mes'); }, []);
+
+	const exportPdf = async () => {
+		if (!data) return;
+		const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+		const pageW = doc.internal.pageSize.getWidth();
+
+		// Logo (si existe en public)
+		try {
+			const img = await fetch('/logo-empresa.png').then(r => r.blob()).then(b => new Promise((res) => {
+				const fr = new FileReader();
+				fr.onload = () => res(fr.result);
+				fr.readAsDataURL(b);
+			}));
+			doc.addImage(img, 'PNG', 40, 30, 120, 60);
+		} catch (_) { /* si no existe, continuar */ }
+
+		// Título
+		doc.setFont('helvetica', 'bold');
+		doc.setFontSize(18);
+		doc.text('AUTO MOTORES - Reporte', 180, 60);
+		doc.setFontSize(11);
+		doc.setFont('helvetica', 'normal');
+		doc.text(`Periodo: ${periodo === 'hoy' ? 'Hoy' : periodo === 'semana' ? 'Esta semana' : 'Este mes'}`, 180, 78);
+		doc.text(new Date().toLocaleString(), 180, 94);
+
+		// KPIs
+		doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('Resumen', 40, 120);
+		const kpiRows = [
+			['Total Ventas', `Bs ${fmt(data?.kpis?.total_ventas)}`],
+			['Servicios', `${fmt(data?.kpis?.servicios)}`],
+			['Ingresos Netos', `Bs ${fmt(data?.kpis?.ingresos_netos)}`],
+			['Stock Bajo', `${fmt(data?.kpis?.stock_bajo)}`],
+		];
+		// @ts-ignore
+		doc.autoTable({ startY: 130, head: [['KPI', 'Valor']], body: kpiRows, styles: { fontSize: 10 } });
+
+		// Ventas por día
+		doc.setFont('helvetica', 'bold'); doc.text('Ventas por Día', 40, doc.lastAutoTable.finalY + 30);
+		const vRows = (data?.ventas_por_dia || []).map(r => [
+			new Date(r.fecha).toLocaleDateString('es-BO', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }),
+			`Bs ${Number(r.total || 0).toLocaleString('es-BO', { maximumFractionDigits: 0 })}`
+		]);
+		// @ts-ignore
+		doc.autoTable({ startY: doc.lastAutoTable.finalY + 38, head: [['Fecha', 'Total']], body: vRows, styles: { fontSize: 10 } });
+
+		// Servicios más solicitados
+		doc.setFont('helvetica', 'bold'); doc.text('Servicios Más Solicitados', 40, doc.lastAutoTable.finalY + 30);
+		const sRows = (data?.servicios_solicitados || []).map(r => [r.nombre, Number(r.cantidad || 0)]);
+		// @ts-ignore
+		doc.autoTable({ startY: doc.lastAutoTable.finalY + 38, head: [['Servicio', 'Cantidad']], body: sRows, styles: { fontSize: 10 } });
+
+		// Resumen de Ingresos
+		doc.setFont('helvetica', 'bold'); doc.text('Resumen de Ingresos', 40, doc.lastAutoTable.finalY + 30);
+		const ir = data?.ingresos_resumen || {};
+		const iRows = [
+			['Servicios', `Bs ${fmt(ir?.servicios?.monto)}`, `${ir?.servicios?.porcentaje || 0}%`],
+			['Productos', `Bs ${fmt(ir?.productos?.monto)}`, `${ir?.productos?.porcentaje || 0}%`],
+		];
+		// @ts-ignore
+		doc.autoTable({ startY: doc.lastAutoTable.finalY + 38, head: [['Tipo', 'Monto', 'Porcentaje']], body: iRows, styles: { fontSize: 10 } });
+
+		doc.save('reporte-auto-motores.pdf');
+	};
 
 	const ventasMax = useMemo(() => {
 		const arr = data?.ventas_por_dia || [];
@@ -24,15 +89,25 @@ export default function Reportes() {
 					<h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Reportes</h1>
 					<p className="text-gray-500 mt-1">Análisis y estadísticas del negocio</p>
 				</div>
-				<select
-					className="border rounded-lg px-4 py-2 bg-white min-w-48"
-					value={periodo}
-					onChange={(e) => { setPeriodo(e.target.value); load(e.target.value); }}
-				>
-					<option value="hoy">Hoy</option>
-					<option value="semana">Esta Semana</option>
-					<option value="mes">Este Mes</option>
-				</select>
+				<div className="flex gap-2">
+					<select
+						className="border rounded-lg px-4 py-2 bg-white min-w-48"
+						value={periodo}
+						onChange={(e) => { setPeriodo(e.target.value); load(e.target.value); }}
+					>
+						<option value="hoy">Hoy</option>
+						<option value="semana">Esta Semana</option>
+						<option value="mes">Este Mes</option>
+					</select>
+					<button
+						className="px-4 py-2 rounded-lg bg-primary text-white"
+						onClick={exportPdf}
+						disabled={!data}
+						title="Descargar PDF"
+					>
+						Descargar PDF
+					</button>
+				</div>
 			</div>
 
 			<div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -143,26 +218,84 @@ function pieColor(i) { return ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c
 
 function LineChartLike({ rows, max }) {
 	if (!rows.length) return <div className="text-sm text-gray-500">Sin datos</div>;
-	const w = 520; const h = 220; const pad = 24;
+	const w = 560; const h = 260; const padL = 46; const padR = 16; const padT = 16; const padB = 34;
 	const points = rows.map((r, i) => {
-		const x = pad + (i * ((w - pad * 2) / Math.max(1, rows.length - 1)));
-		const y = h - pad - ((Number(r.total || 0) / Math.max(1, max)) * (h - pad * 2));
+		const x = padL + (i * ((w - padL - padR) / Math.max(1, rows.length - 1)));
+		const y = h - padB - ((Number(r.total || 0) / Math.max(1, max)) * (h - padT - padB));
 		return [x, y];
 	});
 	const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`).join(' ');
+	const [tip, setTip] = React.useState(null);
+
+	// Ejes y rejilla estética
+	const yTicks = 5;
+	const yLabels = Array.from({ length: yTicks + 1 }, (_, i) => Math.round((i * max) / yTicks));
+
 	return (
-		<div>
-			<svg viewBox={`0 0 ${w} ${h}`} className="w-full h-64 bg-white rounded">
+		<div className="relative">
+			<svg viewBox={`0 0 ${w} ${h}`} className="w-full h-72 bg-white rounded">
 				<rect x="0" y="0" width={w} height={h} fill="white" />
-				{[0.25, 0.5, 0.75].map((r, i) => (
-					<line key={i} x1={pad} y1={h - pad - r * (h - pad * 2)} x2={w - pad} y2={h - pad - r * (h - pad * 2)} stroke="#e5e7eb" strokeDasharray="4 4" />
+
+				{/* Rejilla horizontal y etiquetas Y */}
+				{yLabels.map((val, i) => {
+					const y = h - padB - (i * (h - padT - padB) / yTicks);
+					return (
+						<g key={i}>
+							<line x1={padL} y1={y} x2={w - padR} y2={y} stroke="#e5e7eb" strokeDasharray="4 4" />
+							<text x={padL - 8} y={y + 4} textAnchor="end" fontSize="12" fill="#6b7280">
+								{Number(val).toLocaleString('es-BO', { maximumFractionDigits: 0 })}
+							</text>
+						</g>
+					);
+				})}
+
+				{/* Eje X base */}
+				<line x1={padL} y1={h - padB} x2={w - padR} y2={h - padB} stroke="#9ca3af" />
+
+				{/* Rejilla vertical suave */}
+				{points.map((p, i) => (
+					<line key={`vx-${i}`} x1={p[0]} y1={padT} x2={p[0]} y2={h - padB} stroke="#eef2f7" />
 				))}
-				<polyline points={`${pad},${h - pad} ${w - pad},${h - pad}`} stroke="#9ca3af" fill="none" />
+
+				{/* Línea */}
 				<path d={d} stroke="#1f64b2" strokeWidth="3" fill="none" />
-				{points.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="4" fill="#1f64b2" />)}
+
+				{/* Puntos interactivos */}
+				{points.map((p, i) => (
+					<circle
+						key={i}
+						cx={p[0]}
+						cy={p[1]}
+						r="5.5"
+						fill="#1f64b2"
+						stroke="#ffffff"
+						strokeWidth="2"
+						onMouseEnter={(e) => {
+							const dateStr = new Date(rows[i].fecha).toLocaleDateString('es-BO', { weekday: 'short' });
+							setTip({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY, dia: dateStr, total: Number(rows[i].total || 0) });
+						}}
+						onMouseMove={(e) => setTip((t) => t ? ({ ...t, x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY }) : t)}
+						onMouseLeave={() => setTip(null)}
+					/>
+				))}
 			</svg>
-			<div className="grid grid-cols-7 text-sm text-gray-500 mt-1">
-				{rows.map((r) => <span key={r.fecha}>{new Date(r.fecha).toLocaleDateString('es-BO', { weekday: 'short' })}</span>)}
+			{tip && (
+				<div
+					className="absolute z-10 bg-white border border-gray-300 shadow-lg px-4 py-3 text-sm rounded-lg"
+					style={{ left: tip.x + 14, top: tip.y - 14 }}
+				>
+					<div className="font-semibold mb-1">
+						Día: {tip.dia.charAt(0).toUpperCase() + tip.dia.slice(1)}
+					</div>
+					<div className="text-blue-700">
+						ventas : Bs {Number(tip.total).toLocaleString('es-BO', { maximumFractionDigits: 0 })}
+					</div>
+				</div>
+			)}
+			<div className="grid grid-cols-7 text-sm text-gray-600 mt-1">
+				{['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map((lbl) => (
+					<span key={lbl} className="text-center">{lbl}</span>
+				))}
 			</div>
 		</div>
 	);

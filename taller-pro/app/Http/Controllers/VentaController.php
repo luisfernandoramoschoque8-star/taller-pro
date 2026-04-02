@@ -36,7 +36,7 @@ class VentaController extends Controller
 	public function store(Request $request)
 	{
 		$data = $request->validate([
-			'cliente_id' => ['nullable', 'exists:clientes,id'],
+			'cliente_id' => ['required', 'exists:clientes,id'],
 			'items' => ['required', 'array', 'min:1'],
 			'items.*.tipo' => ['required', Rule::in(['producto','servicio'])],
 			'items.*.id' => ['required', 'integer'],

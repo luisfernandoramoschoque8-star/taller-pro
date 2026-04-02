@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -20,9 +19,7 @@ class AuthController extends Controller
 		$user = User::with('rol')->where('email', $credentials['email'])->first();
 
 		if (!$user || !Hash::check($credentials['password'], $user->password)) {
-			throw ValidationException::withMessages([
-				'email' => ['Credenciales inválidas.'],
-			]);
+			return response()->json(['message' => 'Credenciales inválidas.'], 401);
 		}
 
 		if (!$user->activo) {

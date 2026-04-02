@@ -11,7 +11,7 @@ class Cliente extends Model
 	use HasFactory;
 
 	protected $table = 'clientes';
-	protected $fillable = ['nombre', 'telefono', 'email', 'direccion', 'ci', 'activo'];
+	protected $fillable = ['nombre', 'telefono', 'email', 'direccion', 'ci'];
 
 	public function scopeSearch(Builder $query, ?string $term): Builder
 	{

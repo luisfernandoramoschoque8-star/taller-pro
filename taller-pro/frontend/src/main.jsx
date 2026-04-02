@@ -13,6 +13,7 @@ import Ventas from './pages/Ventas.jsx';
 import Inventario from './pages/Inventario.jsx';
 import Caja from './pages/Caja.jsx';
 import Reportes from './pages/Reportes.jsx';
+import Usuarios from './pages/Usuarios.jsx';
 
 const App = () => (
 	<AuthProvider>
@@ -25,7 +26,7 @@ const App = () => (
 						<ProtectedRoute>
 							<div className="flex">
 								<Sidebar />
-								<div className="flex-1 min-h-screen bg-gray-50 p-6">
+								<div className="flex-1 ml-64 min-h-screen bg-gray-50 p-6">
 									<Dashboard />
 								</div>
 							</div>
@@ -38,7 +39,7 @@ const App = () => (
 						<ProtectedRoute allow={['admin', 'empleado']}>
 							<div className="flex">
 								<Sidebar />
-								<div className="flex-1 min-h-screen bg-gray-50 p-6">
+								<div className="flex-1 ml-64 min-h-screen bg-gray-50 p-6">
 									<Clientes />
 								</div>
 							</div>
@@ -52,7 +53,7 @@ const App = () => (
 						<ProtectedRoute allow={['admin', 'empleado']}>
 							<div className="flex">
 								<Sidebar />
-								<div className="flex-1 min-h-screen bg-gray-50 p-6">
+								<div className="flex-1 ml-64 min-h-screen bg-gray-50 p-6">
                                     <Servicios />
                                 </div>
 							</div>
@@ -65,7 +66,7 @@ const App = () => (
 						<ProtectedRoute allow={['admin', 'empleado']}>
 							<div className="flex">
 								<Sidebar />
-								<div className="flex-1 min-h-screen bg-gray-50 p-6">
+								<div className="flex-1 ml-64 min-h-screen bg-gray-50 p-6">
 									<Ventas />
 								</div>
 							</div>
@@ -78,7 +79,7 @@ const App = () => (
 						<ProtectedRoute allow={['admin', 'almacenero']}>
 							<div className="flex">
 								<Sidebar />
-								<div className="flex-1 min-h-screen bg-gray-50 p-6">
+								<div className="flex-1 ml-64 min-h-screen bg-gray-50 p-6">
 									<Inventario />
 								</div>
 							</div>
@@ -91,8 +92,21 @@ const App = () => (
 						<ProtectedRoute allow={['admin']}>
 							<div className="flex">
 								<Sidebar />
-								<div className="flex-1 min-h-screen bg-gray-50 p-6">
+								<div className="flex-1 ml-64 min-h-screen bg-gray-50 p-6">
 									<Caja />
+								</div>
+							</div>
+						</ProtectedRoute>
+					}
+				/>
+				<Route
+					path="/usuarios"
+					element={
+						<ProtectedRoute allow={['admin']}>
+							<div className="flex">
+								<Sidebar />
+								<div className="flex-1 ml-64 min-h-screen bg-gray-50 p-6">
+									<Usuarios />
 								</div>
 							</div>
 						</ProtectedRoute>
@@ -104,7 +118,7 @@ const App = () => (
 						<ProtectedRoute allow={['admin', 'almacenero']}>
 							<div className="flex">
 								<Sidebar />
-								<div className="flex-1 min-h-screen bg-gray-50 p-6">
+								<div className="flex-1 ml-64 min-h-screen bg-gray-50 p-6">
 									<Reportes />
 								</div>
 							</div>

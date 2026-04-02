@@ -11,6 +11,7 @@ use App\Http\Controllers\InventarioController;
 use App\Http\Controllers\CajaController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\UsuarioController;
 
 Route::prefix('auth')->group(function () {
 	Route::post('login', [AuthController::class, 'login']);
@@ -28,7 +29,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
 		Route::get('clientes/{cliente}', [ClienteController::class, 'show']);
 		Route::put('clientes/{cliente}', [ClienteController::class, 'update']);
 		Route::delete('clientes/{cliente}', [ClienteController::class, 'destroy']);
-		Route::post('clientes/{cliente}/toggle', [ClienteController::class, 'toggle']);
 	});
 
 	// Servicios
@@ -45,6 +45,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 		Route::get('ordenes-servicio/resumen', [OrdenServicioController::class, 'resumen']);
 		Route::get('ordenes-servicio', [OrdenServicioController::class, 'index']);
 		Route::post('ordenes-servicio', [OrdenServicioController::class, 'store']);
+		Route::patch('ordenes-servicio/{ordenServicio}/estado', [OrdenServicioController::class, 'updateEstado']);
 
 		// listas auxiliares
 		Route::get('clientes/all', [ClienteController::class, 'all']);
@@ -71,6 +72,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
 		Route::get('caja/estado', [CajaController::class, 'estado']);
 		Route::post('caja/abrir', [CajaController::class, 'abrir']);
 		Route::post('caja/cerrar', [CajaController::class, 'cerrar']);
+
+		// Gestión de usuarios/roles
+		Route::get('usuarios', [UsuarioController::class, 'index']);
+		Route::post('usuarios', [UsuarioController::class, 'store']);
+		Route::put('usuarios/{user}/rol', [UsuarioController::class, 'updateRol']);
+		Route::put('usuarios/{user}/password', [UsuarioController::class, 'resetPassword']);
+		Route::delete('usuarios/{user}', [UsuarioController::class, 'destroy']);
 	});
 
 	// Reportes (Admin todo, Almacenero puede ver stock/reportes)

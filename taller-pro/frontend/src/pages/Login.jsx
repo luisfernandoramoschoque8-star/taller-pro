@@ -16,7 +16,11 @@ export default function Login() {
 			await login(email, password);
 			window.location.href = '/';
 		} catch (err) {
-			setError(err?.response?.data?.message || 'Error al iniciar sesión');
+			setError(
+				err?.response?.data?.message ||
+				err?.response?.data?.errors?.email?.[0] ||
+				'Error al iniciar sesión'
+			);
 		} finally {
 			setLoading(false);
 		}
