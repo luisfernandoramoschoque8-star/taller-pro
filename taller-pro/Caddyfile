@@ -24,9 +24,9 @@
 	respond @preflight 204
 
 	# PHP (FrankenPHP) + routing Laravel con query string preservado
-	php_server
 	route {
 		try_files {path} {path}/ /index.php?{query}
+		php_server
 		file_server
 	}
 }
