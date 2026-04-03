@@ -6,15 +6,28 @@
 	root * /app/public
 	encode zstd br gzip
 
-	header {
-		Access-Control-Allow-Origin *
-		Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+	# CORS para el frontend en Vercel
+	@api path /api/*
+	header @api {
+		Access-Control-Allow-Origin https://taller-pro-three.vercel.app
+		Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
 		Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+		Access-Control-Max-Age 86400
 	}
 
 	@options method OPTIONS
 	respond @options 204
 
+	# Reescritura Laravel: todo lo que no sea archivo va a index.php
+	@notStatic {
+		not file
+	}
+	rewrite @notStatic /index.php
+
+	# PHP (FrankenPHP)
 	php_server
+
+	# Archivos estáticos
+	file_server
 }
 
