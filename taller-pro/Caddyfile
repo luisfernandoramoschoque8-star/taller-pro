@@ -17,12 +17,11 @@
 	}
 
 	# Preflight OPTIONS en /api/* debe devolver 204 con headers CORS
-	handle @cors {
-		@preflight {
-			method OPTIONS
-		}
-		respond @preflight 204
+	@preflight {
+		method OPTIONS
+		path /api/*
 	}
+	respond @preflight 204
 
 	# PHP (FrankenPHP) + routing Laravel con query string preservado
 	php_server
