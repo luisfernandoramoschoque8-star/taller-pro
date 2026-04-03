@@ -6,9 +6,9 @@
 	root * /app/public
 	encode zstd br gzip
 
-	# CORS para el frontend en Vercel
-	@api path /api/*
-	header @api {
+	# CORS para el frontend en Vercel (solo bajo /api/*)
+	@cors path /api/*
+	header @cors {
 		Access-Control-Allow-Origin https://taller-pro-three.vercel.app
 		Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
 		Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
@@ -16,12 +16,13 @@
 		Vary Origin
 	}
 
-	# Responder preflight (OPTIONS) asegurando incluir los headers CORS anteriores
-	@options {
-		method OPTIONS
-		path /api/*
+	# Preflight OPTIONS en /api/* debe devolver 204 con headers CORS
+	handle @cors {
+		@preflight {
+			method OPTIONS
+		}
+		respond @preflight 204
 	}
-	respond @options 204
 
 	# PHP (FrankenPHP) + routing Laravel con query string preservado
 	php_server
