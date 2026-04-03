@@ -27,8 +27,8 @@
 	# PHP (FrankenPHP) + routing Laravel con query string preservado
 	php_server
 	route {
-		file_server
 		try_files {path} {path}/ /index.php?{query}
+		file_server
 	}
 }
 
