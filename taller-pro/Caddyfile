@@ -13,21 +13,21 @@
 		Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
 		Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
 		Access-Control-Max-Age 86400
+		Vary Origin
 	}
 
-	@options method OPTIONS
+	# Responder preflight (OPTIONS) asegurando incluir los headers CORS anteriores
+	@options {
+		method OPTIONS
+		path /api/*
+	}
 	respond @options 204
 
-	# Reescritura Laravel: todo lo que no sea archivo va a index.php
-	@notStatic {
-		not file
-	}
-	rewrite @notStatic /index.php
-
-	# PHP (FrankenPHP)
+	# PHP (FrankenPHP) + routing Laravel con query string preservado
 	php_server
-
-	# Archivos estáticos
-	file_server
+	route {
+		file_server
+		try_files {path} {path}/ /index.php?{query}
+	}
 }
 
